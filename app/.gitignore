@@ -1,1 +1,5 @@
 /build
+
+app/src/main/assets/*.pkl
+app/src/main/assets/*.pt
+app/src/main/assets/model.*

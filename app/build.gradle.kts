@@ -49,7 +49,7 @@ android {
 // Cấu hình Chaquopy Python - PHẢI Ở NGOÀI android block
 chaquopy {
     defaultConfig {
-        version = "3.11"
+        version = "3.8"
 
         pip {
             install("numpy")

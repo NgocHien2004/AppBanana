@@ -33,10 +33,14 @@ object PythonHelper {
     private fun copyAssetToInternal(context: Context, filename: String): String {
         val outFile = File(context.filesDir, filename)
         if (!outFile.exists()) {
-            context.assets.open(filename).use { input ->
-                FileOutputStream(outFile).use { output ->
-                    input.copyTo(output)
+            try {
+                context.assets.open(filename).use { input ->
+                    FileOutputStream(outFile).use { output ->
+                        input.copyTo(output)
+                    }
                 }
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
         }
         return outFile.absolutePath
@@ -46,7 +50,7 @@ object PythonHelper {
         val module = python.getModule("predictor")
         val result = module.callAttr("predict_image", imagePath)
 
-        // Cast trực tiếp sang Map<String, Any>
+        @Suppress("UNCHECKED_CAST")
         val resultMap = result.asMap() as Map<String, Any?>
 
         val success = resultMap["success"] as? Boolean ?: false

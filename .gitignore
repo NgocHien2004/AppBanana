@@ -15,3 +15,5 @@
 local.properties
 app/src/main/assets/best.pt
 app/src/main/assets/best_model_10k_epochs.pkl
+app/src/main/assets/yolov11.pt
+app/src/main/assets/regression.pkl

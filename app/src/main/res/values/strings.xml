@@ -1,3 +1,11 @@
 <resources>
     <string name="app_name">Banana</string>
+    <string name="title_prediction">Dự đoán hạn sử dụng Chuối</string>
+    <string name="btn_camera">Chụp ảnh</string>
+    <string name="btn_gallery">Chọn từ thư viện</string>
+    <string name="label_result">Kết quả dự đoán:</string>
+    <string name="label_banana_type">Loại chuối</string>
+    <string name="label_days">0 ngày</string>
+    <string name="label_days_exact">(chính xác: 0.0 ngày)</string>
+    <string name="label_status">Trạng thái</string>
 </resources>

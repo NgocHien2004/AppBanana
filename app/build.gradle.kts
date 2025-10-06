@@ -6,19 +6,19 @@ plugins {
 
 android {
     namespace = "com.example.banana"
-    compileSdk = 36
+    compileSdk = 34
 
     defaultConfig {
         applicationId = "com.example.banana"
         minSdk = 24
-        targetSdk = 36
+        targetSdk = 34
         versionCode = 1
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         ndk {
-            abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a")
         }
     }
 
@@ -44,19 +44,28 @@ android {
     buildFeatures {
         viewBinding = true
     }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+    }
+    buildToolsVersion = "36.1.0"
 }
 
-// Cấu hình Chaquopy Python - PHẢI Ở NGOÀI android block
 chaquopy {
     defaultConfig {
-        version = "3.8"
+        version = "3.10"
 
         pip {
-            install("numpy")
-            install("Pillow")
-            install("scikit-learn")
-            install("torch")
-            install("torchvision")
+            install("numpy==1.24.3")
+            install("Pillow==10.0.0")
+            install("torch==1.8.1")  // ← Đổi từ 1.13.1 → 1.8.1
+            install("torchvision==0.9.1")  // ← Đổi version tương thích
+            install("scikit-learn==1.0.2")  // ← Đổi version cũ hơn
         }
     }
 }
@@ -71,12 +80,10 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 
-    // Camera dependencies
-    implementation("androidx.camera:camera-core:1.3.1")
-    implementation("androidx.camera:camera-camera2:1.3.1")
-    implementation("androidx.camera:camera-lifecycle:1.3.1")
-    implementation("androidx.camera:camera-view:1.3.1")
+    implementation("androidx.camera:camera-core:1.5.0")
+    implementation("androidx.camera:camera-camera2:1.5.0")
+    implementation("androidx.camera:camera-lifecycle:1.5.0")
+    implementation("androidx.camera:camera-view:1.5.0")
 
-    // Image loading
-    implementation("com.github.bumptech.glide:glide:4.16.0")
+    implementation("com.github.bumptech.glide:glide:5.0.5")
 }

@@ -1,10 +1,14 @@
 package com.example.banana
 
 import android.Manifest
+import android.content.ContentResolver
 import android.content.pm.PackageManager
+import android.database.Cursor
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
+import android.provider.MediaStore
+import android.provider.OpenableColumns
 import android.view.View
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -15,6 +19,7 @@ import androidx.core.content.FileProvider
 import com.example.banana.databinding.ActivityMainBinding
 import utils.PythonHelper
 import java.io.File
+import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -27,6 +32,8 @@ class MainActivity : AppCompatActivity() {
         ActivityResultContracts.TakePicture()
     ) { success ->
         if (success) {
+            binding.ivPreview.setImageURI(Uri.fromFile(File(currentPhotoPath)))
+            binding.ivPreview.visibility = View.VISIBLE
             predictFromImage(currentPhotoPath)
         }
     }
@@ -35,9 +42,16 @@ class MainActivity : AppCompatActivity() {
         ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let {
-            val path = getRealPathFromURI(it)
-            path?.let { imagePath ->
-                predictFromImage(imagePath)
+            // Hiển thị preview
+            binding.ivPreview.setImageURI(it)
+            binding.ivPreview.visibility = View.VISIBLE
+
+            // Copy file từ URI sang temp file để xử lý
+            val imagePath = copyUriToTempFile(it)
+            imagePath?.let { path ->
+                predictFromImage(path)
+            } ?: run {
+                Toast.makeText(this, "Không thể đọc ảnh", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -47,8 +61,22 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // Khởi tạo Python
-        PythonHelper.initialize(this)
+        // Khởi tạo Python trong background thread
+        showLoading("Đang khởi tạo model...")
+        Thread {
+            try {
+                PythonHelper.initialize(this)
+                runOnUiThread {
+                    hideLoading()
+                    Toast.makeText(this, "Model đã sẵn sàng!", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    hideLoading()
+                    Toast.makeText(this, "Lỗi khởi tạo: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }.start()
 
         setupClickListeners()
         checkPermissions()
@@ -65,10 +93,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun checkPermissions() {
-        val permissions = arrayOf(
-            Manifest.permission.CAMERA,
-            Manifest.permission.READ_MEDIA_IMAGES
-        )
+        val permissions = mutableListOf(Manifest.permission.CAMERA)
+
+        // Android 13+ cần READ_MEDIA_IMAGES
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            permissions.add(Manifest.permission.READ_MEDIA_IMAGES)
+        } else {
+            permissions.add(Manifest.permission.READ_EXTERNAL_STORAGE)
+        }
 
         val notGranted = permissions.filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
@@ -102,19 +134,52 @@ class MainActivity : AppCompatActivity() {
         return File.createTempFile("BANANA_${timeStamp}_", ".jpg", storageDir)
     }
 
+    private fun copyUriToTempFile(uri: Uri): String? {
+        return try {
+            val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+            val tempFile = File(cacheDir, "temp_${timeStamp}.jpg")
+
+            contentResolver.openInputStream(uri)?.use { input ->
+                FileOutputStream(tempFile).use { output ->
+                    input.copyTo(output)
+                }
+            }
+
+            tempFile.absolutePath
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
     private fun predictFromImage(imagePath: String) {
-        binding.progressBar.visibility = View.VISIBLE
+        showLoading("Đang phân tích...")
 
         Thread {
-            val result = PythonHelper.predict(imagePath)
+            try {
+                val result = PythonHelper.predict(imagePath)
 
-            runOnUiThread {
-                binding.progressBar.visibility = View.GONE
+                runOnUiThread {
+                    hideLoading()
 
-                if (result.success) {
-                    showResult(result)
-                } else {
-                    Toast.makeText(this, "Lỗi: ${result.error}", Toast.LENGTH_LONG).show()
+                    if (result.success) {
+                        showResult(result)
+                    } else {
+                        Toast.makeText(
+                            this,
+                            "Lỗi: ${result.error}",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    hideLoading()
+                    Toast.makeText(
+                        this,
+                        "Exception: ${e.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
                 }
             }
         }.start()
@@ -131,14 +196,34 @@ class MainActivity : AppCompatActivity() {
 
             // Hiển thị trạng thái
             tvStatus.text = result.status
-            tvStatus.setTextColor(Color.parseColor(result.color))
+            try {
+                tvStatus.setTextColor(Color.parseColor(result.color))
+                tvDays.setTextColor(Color.parseColor(result.color))
+            } catch (e: Exception) {
+                tvStatus.setTextColor(Color.parseColor("#4CAF50"))
+                tvDays.setTextColor(Color.parseColor("#4CAF50"))
+            }
 
             resultLayout.visibility = View.VISIBLE
         }
     }
 
-    private fun getRealPathFromURI(uri: Uri): String {
-        // Tạm thời return uri path
-        return uri.path ?: ""
+    private fun showLoading(message: String) {
+        binding.apply {
+            progressBar.visibility = View.VISIBLE
+            tvLoadingMessage.visibility = View.VISIBLE
+            tvLoadingMessage.text = message
+            btnCamera.isEnabled = false
+            btnGallery.isEnabled = false
+        }
+    }
+
+    private fun hideLoading() {
+        binding.apply {
+            progressBar.visibility = View.GONE
+            tvLoadingMessage.visibility = View.GONE
+            btnCamera.isEnabled = true
+            btnGallery.isEnabled = true
+        }
     }
 }

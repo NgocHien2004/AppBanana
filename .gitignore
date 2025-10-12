@@ -1,0 +1,6 @@
+banana_backend/models/model.pkl
+banana_backend/models/regression.pkl
+banana_backend/models/yolov11.pt
+/banana_backend/venv
+ngrok.exe
+/banana_app/build/app/intermediates/merged_native_libs/debug

@@ -17,7 +17,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   bool _isLoading = false;
   bool _isServerHealthy = false;
-  bool _isCheckingHealth = false;
 
   @override
   void initState() {
@@ -26,15 +25,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _checkServerHealth() async {
-    setState(() {
-      _isCheckingHealth = true;
-    });
-
     final isHealthy = await _apiService.checkHealth();
-
     setState(() {
       _isServerHealthy = isHealthy;
-      _isCheckingHealth = false;
     });
 
     if (!isHealthy) {
@@ -77,6 +70,7 @@ class _HomeScreenState extends State<HomeScreen> {
       });
 
       if (result.success) {
+        // SUCCESS: Phát hiện được chuối và dự đoán thành công
         if (mounted) {
           Navigator.push(
             context,
@@ -89,20 +83,120 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         }
       } else {
+        // ERROR: Kiểm tra loại lỗi
         if (mounted) {
-          showDialog(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: const Text('❌ Lỗi'),
-              content: Text(result.error ?? 'Có lỗi xảy ra'),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('OK'),
+          // Check if error message indicates no banana detected
+          final isNoBananaError =
+              result.error?.contains('Không phát hiện được chuối') ?? false;
+
+          if (isNoBananaError) {
+            // Show friendly dialog for "no banana detected"
+            showDialog(
+              context: context,
+              builder: (context) => AlertDialog(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
                 ),
-              ],
-            ),
-          );
+                title: const Row(
+                  children: [
+                    Icon(Icons.search_off, color: Colors.orange, size: 28),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Không tìm thấy chuối',
+                        style: TextStyle(fontSize: 18),
+                      ),
+                    ),
+                  ],
+                ),
+                content: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Ảnh của bạn không chứa chuối hoặc chuối không rõ ràng.',
+                        style: TextStyle(fontSize: 15),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Gợi ý:',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      _buildTip('Chụp chuối từ góc rõ ràng'),
+                      _buildTip('Đảm bảo ánh sáng đủ'),
+                      _buildTip('Chuối chiếm phần lớn khung hình'),
+                      _buildTip('Tránh bị che khuất hoặc mờ'),
+                    ],
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Đóng'),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _pickAndPredict(ImageSource.camera);
+                    },
+                    icon: const Icon(Icons.camera_alt, size: 20),
+                    label: const Text('Chụp lại'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.amber,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          } else {
+            // Show generic error dialog
+            showDialog(
+              context: context,
+              builder: (context) => AlertDialog(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                title: const Row(
+                  children: [
+                    Icon(Icons.error_outline, color: Colors.red, size: 28),
+                    SizedBox(width: 12),
+                    Text('Lỗi'),
+                  ],
+                ),
+                content: Text(
+                  result.error ?? 'Có lỗi xảy ra khi xử lý ảnh',
+                  style: const TextStyle(fontSize: 15),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Đóng'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _pickAndPredict(source);
+                    },
+                    child: const Text('Thử lại'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.amber,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
         }
       }
     } catch (e) {
@@ -116,6 +210,24 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       }
     }
+  }
+
+  Widget _buildTip(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('• ', style: TextStyle(fontSize: 14)),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(fontSize: 13),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -155,7 +267,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     SizedBox(height: 8),
                     Text(
-                      'Vui lòng đợi trong giây lát',
+                      '1. Phát hiện chuối...',
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      '2. Phân tích độ tươi...',
                       style: TextStyle(color: Colors.grey),
                     ),
                   ],
@@ -165,76 +282,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Card(
-                        elevation: 4,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        color: _isServerHealthy
-                            ? Colors.green.shade50
-                            : Colors.red.shade50,
-                        child: Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Row(
-                            children: [
-                              Icon(
-                                _isServerHealthy
-                                    ? Icons.check_circle
-                                    : Icons.error,
-                                color: _isServerHealthy
-                                    ? Colors.green
-                                    : Colors.red,
-                                size: 28,
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      _isServerHealthy
-                                          ? '✅ Server đang hoạt động'
-                                          : '❌ Không kết nối được server',
-                                      style: TextStyle(
-                                        color: _isServerHealthy
-                                            ? Colors.green.shade900
-                                            : Colors.red.shade900,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16,
-                                      ),
-                                    ),
-                                    if (!_isServerHealthy) ...[
-                                      const SizedBox(height: 4),
-                                      const Text(
-                                        'Kiểm tra backend đã chạy chưa',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.grey,
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                              if (_isCheckingHealth)
-                                const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              else
-                                IconButton(
-                                  icon: const Icon(Icons.refresh),
-                                  onPressed: _checkServerHealth,
-                                  tooltip: 'Kiểm tra lại',
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 48),
                       Container(
                         width: 150,
                         height: 150,
@@ -258,7 +305,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(height: 8),
                       const Text(
-                        'Để dự đoán thời hạn sử dụng',
+                        'AI sẽ tự động phát hiện và dự đoán',
                         style: TextStyle(
                           fontSize: 16,
                           color: Colors.grey,
@@ -283,6 +330,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.amber,
                             foregroundColor: Colors.white,
+                            disabledBackgroundColor: Colors.grey,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16),
                             ),
@@ -309,6 +357,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.blue,
                             foregroundColor: Colors.white,
+                            disabledBackgroundColor: Colors.grey,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16),
                             ),

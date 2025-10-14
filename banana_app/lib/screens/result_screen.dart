@@ -102,23 +102,13 @@ class ResultScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          Text(
-                            emoji,
-                            style: const TextStyle(fontSize: 40),
-                          ),
-                          const SizedBox(width: 12),
-                          const Expanded(
-                            child: Text(
-                              'Kết quả phân tích',
-                              style: TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ],
+                      // BỎ ROW VỚI EMOJI
+                      const Text(
+                        'Kết quả phân tích',
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       const Divider(height: 32, thickness: 2),
                       const Text(
@@ -176,17 +166,7 @@ class ResultScreen extends StatelessWidget {
                           ),
                         ),
                       ),
-                      const SizedBox(height: 16),
-                      Center(
-                        child: Text(
-                          '(chính xác: ${result.daysExact} ngày)',
-                          style: const TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey,
-                            fontStyle: FontStyle.italic,
-                          ),
-                        ),
-                      ),
+                      // BỎ DÒNG "(chính xác: 4.7 ngày)"
                       const SizedBox(height: 24),
                       Container(
                         padding: const EdgeInsets.all(16),

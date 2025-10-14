@@ -39,3 +39,4 @@ ngrok.exe
 # 📝 Logs & misc
 *.log
 .DS_Store
+/banana_backend/uploads

@@ -20,29 +20,9 @@ class ResultScreen extends StatelessWidget {
     }
   }
 
-  String _getEmoji(int days) {
-    if (days <= 0) return '🚫';
-    if (days <= 2) return '⚠️';
-    if (days <= 5) return '😊';
-    return '🌟';
-  }
-
-  String _getRecommendation(int days) {
-    if (days <= 0) {
-      return 'Chuối đã hỏng, không nên sử dụng. Hãy vứt bỏ để tránh ảnh hưởng sức khỏe.';
-    } else if (days <= 2) {
-      return 'Chuối sắp hỏng, nên dùng ngay hôm nay hoặc ngày mai. Có thể làm sinh tố hoặc nướng.';
-    } else if (days <= 5) {
-      return 'Chuối còn tốt, bảo quản ở nhiệt độ phòng. Tránh ánh nắng trực tiếp.';
-    } else {
-      return 'Chuối rất tươi! Bảo quản ở nơi khô ráo, thoáng mát. Có thể để trong tủ lạnh nếu muốn giữ lâu hơn.';
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final statusColor = _parseColor(result.color);
-    final emoji = _getEmoji(result.days);
 
     return Scaffold(
       appBar: AppBar(
@@ -102,7 +82,6 @@ class ResultScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // BỎ ROW VỚI EMOJI
                       const Text(
                         'Kết quả phân tích',
                         style: TextStyle(
@@ -111,23 +90,6 @@ class ResultScreen extends StatelessWidget {
                         ),
                       ),
                       const Divider(height: 32, thickness: 2),
-                      const Text(
-                        'Loại chuối:',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '🍌 ${result.bananaType}',
-                        style: const TextStyle(
-                          fontSize: 26,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 24),
                       Center(
                         child: Container(
                           padding: const EdgeInsets.symmetric(
@@ -145,28 +107,19 @@ class ResultScreen extends StatelessWidget {
                           child: Column(
                             children: [
                               Text(
-                                '${result.days}',
+                                result.daysDisplay,
+                                textAlign: TextAlign.center,
                                 style: TextStyle(
-                                  fontSize: 72,
+                                  fontSize: 40,
                                   fontWeight: FontWeight.bold,
                                   color: statusColor,
-                                  height: 1,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              const Text(
-                                'NGÀY',
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 2,
+                                  height: 1.2,
                                 ),
                               ),
                             ],
                           ),
                         ),
                       ),
-                      // BỎ DÒNG "(chính xác: 4.7 ngày)"
                       const SizedBox(height: 24),
                       Container(
                         padding: const EdgeInsets.all(16),
@@ -223,7 +176,7 @@ class ResultScreen extends StatelessWidget {
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              _getRecommendation(result.days),
+                              result.recommendation,
                               style: const TextStyle(
                                 fontSize: 14,
                                 height: 1.5,

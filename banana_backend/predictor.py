@@ -207,77 +207,93 @@ class BananaPredictor:
         """
         Calculate days range display based on prediction
         
-        Logic: prediction = SỐ NGÀY CÒN SỬ DỤNG ĐƯỢC
-        - < 1.5: "Đã hỏng" hoặc "0-1 ngày"
-        - > 5.5: "Trên 6 ngày" (rất tươi)
-        - Còn lại: hiển thị range (floor-floor+1)
-          + 3.3 → 3-4 ngày (còn 3-4 ngày sử dụng)
-          + 4.7 → 4-5 ngày (còn 4-5 ngày sử dụng)
+        Logic: prediction = SỐ NGÀY ĐÃ TRÔI QUA TỪ LÚC THU HOẠCH
+        - Số NHỎ = tươi = còn nhiều ngày sử dụng
+        - Số LỚN = cũ = gần hỏng
+        
+        Mapping:
+        - < 1.5: "Trên 6 ngày" (còn trên 6 ngày sử dụng)
+        - 1.5-2.5: "4-5 ngày" (còn 4-5 ngày sử dụng)
+        - 2.5-3.5: "3-4 ngày" (còn 3-4 ngày sử dụng)
+        - 3.5-4.5: "2-3 ngày" (còn 2-3 ngày sử dụng)
+        - 4.5-5.5: "0-1 ngày" (còn 0-1 ngày sử dụng)
+        - > 5.5: "Đã hỏng"
         
         Returns:
             str: Formatted days range
         """
-        if prediction < 0.5:
+        if prediction > 5.5:
             return "Đã hỏng"
-        elif prediction < 1.5:
+        elif prediction >= 4.5:
             return "0-1 ngày"
-        elif prediction > 5.5:
+        elif prediction >= 3.5:
+            return "2-3 ngày"
+        elif prediction >= 2.5:
+            return "3-4 ngày"
+        elif prediction >= 1.5:
+            return "4-5 ngày"
+        else:  # < 1.5
             return "Trên 6 ngày"
-        else:
-            # Tính range: floor - (floor+1)
-            lower = int(prediction)
-            upper = lower + 1
-            return f"{lower}-{upper} ngày"
     
     def get_freshness_status(self, prediction: float) -> Dict:
         """
         Determine freshness status
+        
+        Logic: prediction = SỐ NGÀY CÒN SỬ DỤNG ĐƯỢC
+        - Càng lớn = càng tươi
+        - Càng nhỏ = càng gần hỏng
         
         Returns:
             dict: status, color, recommendation, days_display
         """
         days_display = self.calculate_days_range(prediction)
         
-        if prediction < 1.5:
+        # Rất tươi: trên 5.5 ngày
+        if prediction > 5.5:
             return {
                 "status": "Rất tươi",
                 "color": "#4CAF50",
                 "recommendation": "Chuối rất tươi, có thể bảo quản lâu.",
                 "days_display": days_display
             }
-        elif prediction > 5.5:
+        # Tươi: 4-5.5 ngày
+        elif prediction >= 4.0:
             return {
-                "status": "Đã hỏng",
-                "color": "#9E9E9E",
-                "recommendation": "Chuối đã hỏng, không nên sử dụng.",
+                "status": "Tươi",
+                "color": "#8BC34A",
+                "recommendation": "Chuối còn tươi tốt, bảo quản ở nhiệt độ phòng.",
                 "days_display": days_display
             }
-        elif prediction > 4.5:
+        # Khá tốt: 2.5-4 ngày
+        elif prediction >= 2.5:
+            return {
+                "status": "Khá tốt",
+                "color": "#FFC107",
+                "recommendation": "Chuối vẫn ổn, nên ăn trong vài ngày tới.",
+                "days_display": days_display
+            }
+        # Chín - nên dùng sớm: 1.5-2.5 ngày
+        elif prediction >= 1.5:
+            return {
+                "status": "Chín - Nên dùng sớm",
+                "color": "#FF9800",
+                "recommendation": "Chuối đã chín, nên ăn trong 1-2 ngày.",
+                "days_display": days_display
+            }
+        # Rất chín - dùng ngay: 0.5-1.5 ngày
+        elif prediction >= 0.5:
             return {
                 "status": "Rất chín - Dùng ngay",
                 "color": "#F44336",
                 "recommendation": "Chuối rất chín, cần dùng ngay hoặc làm sinh tố/nướng.",
                 "days_display": days_display
             }
-        elif prediction >= 3.5:
-            return {
-                "status": "Chín - Nên dùng sớm",
-                "color": "#FF9800",
-                "recommendation": "Chuối đã chín, nên ăn trong vài ngày tới.",
-                "days_display": days_display
-            }
-        elif prediction >= 2.5:
-            return {
-                "status": "Khá tốt",
-                "color": "#FFC107",
-                "recommendation": "Chuối vẫn ổn, bảo quản ở nhiệt độ phòng.",
-                "days_display": days_display
-            }
+        # Đã hỏng: < 0.5 ngày
         else:
             return {
-                "status": "Tươi",
-                "color": "#8BC34A",
-                "recommendation": "Chuối còn tươi tốt, có thể bảo quản lâu.",
+                "status": "Đã hỏng",
+                "color": "#9E9E9E",
+                "recommendation": "Chuối đã hỏng, không nên sử dụng.",
                 "days_display": days_display
             }
     

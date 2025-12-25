@@ -1,42 +1,27 @@
-# 🧠 ML model files (không push file nặng)
 banana_backend/models/model.pkl
 banana_backend/models/regression.pkl
 banana_backend/models/yolov11.pt
+/banana_backend/venv
+env
 
-# 🐍 Python Virtual Environment
-/banana_backend/venv/
+# Flutter
+.dart_tool/
+.packages
+.pub/
+.pub-cache/
+build/
+
+# Android
+android/.gradle/
+android/local.properties
+
+# iOS
+ios/Pods/
+
+# Python
 venv/
-ENV/
-env/
 __pycache__/
 *.pyc
 
-# 🧰 Flutter build outputs
-/banana_app/build/
-/banana_app/build/app/
-/banana_app/build/app/intermediates/merged_native_libs/debug
-
-# 🧪 Dart/Flutter tools
-.dart_tool/
-.packages
-.pub-cache/
-.pub/
-
-# 📱 Android / iOS specific
-android/.gradle/
-android/app/build/
-ios/Pods/
-ios/.symlinks/
-ios/Flutter/
-
-# 🧭 IDE settings
-.vscode/
-.idea/
-
-# 🌐 ngrok executable
-ngrok.exe
-
-# 📝 Logs & misc
-*.log
-.DS_Store
-/banana_backend/uploads
+# Windows
+*.dll

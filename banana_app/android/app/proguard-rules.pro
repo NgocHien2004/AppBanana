@@ -26,3 +26,9 @@
 
 # Prevent obfuscation
 -dontobfuscate
+
+# Google Play Core - FIX MISSING CLASSES
+-dontwarn com.google.android.play.core.splitcompat.**
+-dontwarn com.google.android.play.core.splitinstall.**
+-dontwarn com.google.android.play.core.tasks.**
+-keep class com.google.android.play.core.** { *; }

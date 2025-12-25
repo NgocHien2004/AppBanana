@@ -20,9 +20,29 @@ class ResultScreen extends StatelessWidget {
     }
   }
 
+  String _getEmoji(int days) {
+    if (days <= 0) return '🚫';
+    if (days <= 2) return '⚠️';
+    if (days <= 5) return '😊';
+    return '🌟';
+  }
+
+  String _getRecommendation(int days) {
+    if (days <= 0) {
+      return 'Chuối đã hỏng, không nên sử dụng. Hãy vứt bỏ để tránh ảnh hưởng sức khỏe.';
+    } else if (days <= 2) {
+      return 'Chuối sắp hỏng, nên dùng ngay hôm nay hoặc ngày mai. Có thể làm sinh tố hoặc nướng.';
+    } else if (days <= 5) {
+      return 'Chuối còn tốt, bảo quản ở nhiệt độ phòng. Tránh ánh nắng trực tiếp.';
+    } else {
+      return 'Chuối rất tươi! Bảo quản ở nơi khô ráo, thoáng mát. Có thể để trong tủ lạnh nếu muốn giữ lâu hơn.';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final statusColor = _parseColor(result.color);
+    final emoji = _getEmoji(result.days);
 
     return Scaffold(
       appBar: AppBar(
@@ -82,14 +102,42 @@ class ResultScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      Row(
+                        children: [
+                          Text(
+                            emoji,
+                            style: const TextStyle(fontSize: 40),
+                          ),
+                          const SizedBox(width: 12),
+                          const Expanded(
+                            child: Text(
+                              'Kết quả phân tích',
+                              style: TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Divider(height: 32, thickness: 2),
                       const Text(
-                        'Kết quả phân tích',
+                        'Loại chuối:',
                         style: TextStyle(
-                          fontSize: 24,
+                          fontSize: 14,
+                          color: Colors.grey,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '🍌 ${result.bananaType}',
+                        style: const TextStyle(
+                          fontSize: 26,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const Divider(height: 32, thickness: 2),
+                      const SizedBox(height: 24),
                       Center(
                         child: Container(
                           padding: const EdgeInsets.symmetric(
@@ -107,16 +155,35 @@ class ResultScreen extends StatelessWidget {
                           child: Column(
                             children: [
                               Text(
-                                result.daysDisplay,
-                                textAlign: TextAlign.center,
+                                '${result.days}',
                                 style: TextStyle(
-                                  fontSize: 40,
+                                  fontSize: 72,
                                   fontWeight: FontWeight.bold,
                                   color: statusColor,
-                                  height: 1.2,
+                                  height: 1,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              const Text(
+                                'NGÀY',
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 2,
                                 ),
                               ),
                             ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Center(
+                        child: Text(
+                          '(chính xác: ${result.daysExact} ngày)',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey,
+                            fontStyle: FontStyle.italic,
                           ),
                         ),
                       ),
@@ -176,7 +243,7 @@ class ResultScreen extends StatelessWidget {
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              result.recommendation,
+                              _getRecommendation(result.days),
                               style: const TextStyle(
                                 fontSize: 14,
                                 height: 1.5,

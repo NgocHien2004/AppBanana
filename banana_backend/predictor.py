@@ -11,7 +11,6 @@ import traceback
 class BananaPredictor:
     """
     Predictor kết hợp YOLO (phân loại giống) + Regression (dự đoán shelf life)
-    LOGIC: YOLO trước → Nếu detect được chuối → mới chạy Regression
     """
     
     def __init__(self, yolo_path: str, pkl_path: str):
@@ -55,6 +54,14 @@ class BananaPredictor:
         
         print("✅ All models loaded successfully!")
         
+        # Class mapping (YOLO classes)
+        self.banana_types = {
+            0: "Chuối tiêu cao (Cao-Le)",
+            1: "Chuối tiêu thấp (Cao-Nai)",
+            2: "Chuối xiêm cao (Xiem-Le)",
+            3: "Chuối xiêm thấp (Xiem-Nai)"
+        }
+        
         # Feature columns (SAME AS TRAINING)
         self.feature_columns = [
             'hue_mean', 'saturation_mean', 'value_mean',
@@ -62,11 +69,13 @@ class BananaPredictor:
             'gradient_mean', 'texture_contrast'
         ]
         
+        print(f"📋 Class mapping: {self.banana_types}")
         print(f"🔧 Expected features: {self.feature_columns}")
     
     def extract_visual_features(self, image_path: str) -> Dict:
         """
         Extract same features as training data
+        COPIED FROM test_regression.py
         """
         # Load image
         image = cv2.imread(image_path)
@@ -120,8 +129,7 @@ class BananaPredictor:
         Predict banana type using YOLO
         
         Returns:
-            tuple: (class_id, confidence, detected)
-            detected = True nếu phát hiện được chuối với confidence > threshold
+            tuple: (class_id, confidence)
         """
         try:
             print(f"🔍 Running YOLO prediction...")
@@ -146,19 +154,20 @@ class BananaPredictor:
                 confidence = float(confidences[max_idx])
                 
                 print(f"   ✅ YOLO: class={predicted_class}, conf={confidence:.3f}")
-                return predicted_class, confidence, True
+                return predicted_class, confidence
             else:
-                print("   ❌ No banana detected!")
-                return 0, 0.0, False
+                print("   ⚠️ No banana detected, using default class 0")
+                return 0, 0.5
                 
         except Exception as e:
             print(f"❌ YOLO prediction error: {e}")
             traceback.print_exc()
-            return 0, 0.0, False
+            return 0, 0.5
     
     def predict_shelf_life(self, features: Dict) -> tuple:
         """
         Predict shelf life using ensemble regression model
+        LOGIC FROM test_regression.py
         
         Returns:
             tuple: (prediction, individual_predictions)
@@ -203,108 +212,54 @@ class BananaPredictor:
             traceback.print_exc()
             raise
     
-    def calculate_days_range(self, prediction: float) -> str:
-        """
-        Calculate days range display based on prediction
-        
-        Logic: prediction = SỐ NGÀY ĐÃ TRÔI QUA TỪ LÚC THU HOẠCH
-        - Số NHỎ = tươi = còn nhiều ngày sử dụng
-        - Số LỚN = cũ = gần hỏng
-        
-        Mapping:
-        - < 1.5: "Trên 6 ngày" (còn trên 6 ngày sử dụng)
-        - 1.5-2.5: "4-5 ngày" (còn 4-5 ngày sử dụng)
-        - 2.5-3.5: "3-4 ngày" (còn 3-4 ngày sử dụng)
-        - 3.5-4.5: "2-3 ngày" (còn 2-3 ngày sử dụng)
-        - 4.5-5.5: "0-1 ngày" (còn 0-1 ngày sử dụng)
-        - > 5.5: "Đã hỏng"
-        
-        Returns:
-            str: Formatted days range
-        """
-        if prediction > 5.5:
-            return "Đã hỏng"
-        elif prediction >= 4.5:
-            return "0-1 ngày"
-        elif prediction >= 3.5:
-            return "2-3 ngày"
-        elif prediction >= 2.5:
-            return "3-4 ngày"
-        elif prediction >= 1.5:
-            return "4-5 ngày"
-        else:  # < 1.5
-            return "Trên 6 ngày"
-    
     def get_freshness_status(self, prediction: float) -> Dict:
         """
         Determine freshness status
-        
-        Logic: prediction = SỐ NGÀY CÒN SỬ DỤNG ĐƯỢC
-        - Càng lớn = càng tươi
-        - Càng nhỏ = càng gần hỏng
+        LOGIC FROM test_regression.py
         
         Returns:
-            dict: status, color, recommendation, days_display
+            dict: status, color, recommendation
         """
-        days_display = self.calculate_days_range(prediction)
-        
-        # Rất tươi: trên 5.5 ngày
-        if prediction > 5.5:
+        if prediction >= 4.5:
             return {
-                "status": "Rất tươi",
+                "status": "🟢 Rất tươi",
                 "color": "#4CAF50",
-                "recommendation": "Chuối rất tươi, có thể bảo quản lâu.",
-                "days_display": days_display
+                "recommendation": "Chuối rất tươi, có thể bảo quản lâu. Tốt nhất trong vài ngày tới."
             }
-        # Tươi: 4-5.5 ngày
-        elif prediction >= 4.0:
+        elif prediction >= 3.5:
             return {
-                "status": "Tươi",
+                "status": "🟢 Tươi",
                 "color": "#8BC34A",
-                "recommendation": "Chuối còn tươi tốt, bảo quản ở nhiệt độ phòng.",
-                "days_display": days_display
+                "recommendation": "Chuối còn tươi tốt, nên dùng trong 3-4 ngày."
             }
-        # Khá tốt: 2.5-4 ngày
         elif prediction >= 2.5:
             return {
-                "status": "Khá tốt",
+                "status": "🟡 Khá tốt",
                 "color": "#FFC107",
-                "recommendation": "Chuối vẫn ổn, nên ăn trong vài ngày tới.",
-                "days_display": days_display
+                "recommendation": "Chuối vẫn ổn, nên ăn trong 2-3 ngày."
             }
-        # Chín - nên dùng sớm: 1.5-2.5 ngày
         elif prediction >= 1.5:
             return {
-                "status": "Chín - Nên dùng sớm",
+                "status": "🟠 Chín - Nên dùng sớm",
                 "color": "#FF9800",
-                "recommendation": "Chuối đã chín, nên ăn trong 1-2 ngày.",
-                "days_display": days_display
+                "recommendation": "Chuối đã chín, tốt nhất nên ăn trong 1-2 ngày."
             }
-        # Rất chín - dùng ngay: 0.5-1.5 ngày
         elif prediction >= 0.5:
             return {
-                "status": "Rất chín - Dùng ngay",
+                "status": "🔴 Rất chín - Dùng ngay",
                 "color": "#F44336",
-                "recommendation": "Chuối rất chín, cần dùng ngay hoặc làm sinh tố/nướng.",
-                "days_display": days_display
+                "recommendation": "Chuối rất chín, cần dùng ngay hoặc làm sinh tố/nướng."
             }
-        # Đã hỏng: < 0.5 ngày
         else:
             return {
-                "status": "Đã hỏng",
-                "color": "#9E9E9E",
-                "recommendation": "Chuối đã hỏng, không nên sử dụng.",
-                "days_display": days_display
+                "status": "🔴 Quá chín",
+                "color": "#D32F2F",
+                "recommendation": "Chuối đã quá chín, nên cân nhắc loại bỏ."
             }
     
     def predict(self, image_path: str) -> Dict:
         """
-        Complete prediction pipeline - SEQUENTIAL PROCESSING
-        
-        LOGIC:
-        1. Chạy YOLO trước để detect chuối
-        2. Nếu KHÔNG detect được → return error
-        3. Nếu detect được → extract features và chạy regression
+        Complete prediction pipeline
         
         Args:
             image_path: Path to banana image
@@ -317,54 +272,31 @@ class BananaPredictor:
             print(f"🍌 PROCESSING: {os.path.basename(image_path)}")
             print(f"{'='*60}")
             
-            # ========================================
-            # STEP 1: YOLO Detection (KIỂM TRA TRƯỚC)
-            # ========================================
-            banana_class, yolo_confidence, detected = self.predict_banana_type(image_path)
+            # Step 1: Classify banana type (YOLO)
+            banana_class, yolo_confidence = self.predict_banana_type(image_path)
+            banana_type = self.banana_types.get(banana_class, f"Loại {banana_class}")
             
-            # Nếu KHÔNG phát hiện được chuối → DỪNG và trả lỗi
-            if not detected:
-                error_result = {
-                    "success": False,
-                    "error": "Không phát hiện được chuối trong ảnh",
-                    "error_type": "NO_BANANA_DETECTED",
-                    "message": "Vui lòng chụp lại ảnh có chuối rõ ràng hơn",
-                    "yolo_confidence": round(yolo_confidence, 3)
-                }
-                
-                print(f"\n❌ NO BANANA DETECTED:")
-                print(f"   Confidence: {yolo_confidence:.3f} (too low)")
-                print(f"{'='*60}\n")
-                
-                return error_result
-            
-            # Nếu phát hiện được chuối → Tiếp tục
-            print(f"   ✅ Banana detected (conf={yolo_confidence:.3f})")
-            
-            # ========================================
-            # STEP 2: Extract Features (CHỈ KHI CÓ CHUỐI)
-            # ========================================
+            # Step 2: Extract visual features
             features = self.extract_visual_features(image_path)
             
-            # ========================================
-            # STEP 3: Regression Prediction (CHỈ KHI CÓ CHUỐI)
-            # ========================================
+            # Step 3: Predict shelf life
             days_float, individual_preds = self.predict_shelf_life(features)
+            days_remaining = int(round(days_float))
             
-            # ========================================
-            # STEP 4: Determine Freshness Status
-            # ========================================
+            # Step 4: Determine freshness status
             freshness = self.get_freshness_status(days_float)
             
             # Build result
             result = {
                 "success": True,
-                "days_display": freshness["days_display"],
+                "banana_type": banana_type,
+                "banana_class": int(banana_class),
+                "yolo_confidence": round(yolo_confidence, 3),
+                "days": int(days_remaining),
                 "days_exact": round(days_float, 1),
                 "status": freshness["status"],
                 "color": freshness["color"],
                 "recommendation": freshness["recommendation"],
-                "yolo_confidence": round(yolo_confidence, 3),
                 "individual_predictions": individual_preds,
                 "key_features": {
                     "yellowness_index": round(features['yellowness_index'], 2),
@@ -375,7 +307,8 @@ class BananaPredictor:
             }
             
             print(f"\n✅ PREDICTION SUCCESS:")
-            print(f"   📅 Days: {freshness['days_display']} ({days_float:.1f})")
+            print(f"   🍌 Type: {banana_type}")
+            print(f"   📅 Days: {days_remaining} ({days_float:.1f})")
             print(f"   🎯 Status: {freshness['status']}")
             print(f"   💡 {freshness['recommendation']}")
             print(f"{'='*60}\n")
@@ -390,6 +323,5 @@ class BananaPredictor:
             return {
                 "success": False,
                 "error": error_msg,
-                "error_type": "PROCESSING_ERROR",
                 "error_detail": traceback.format_exc()
             }

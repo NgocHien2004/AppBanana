@@ -1,25 +1,15 @@
 """
-BANANA SHELF LIFE PREDICTOR - Backend cho Flutter App
-Features:
-- YOLO detection
-- 120 features extraction
-- Confidence filter (top 3 models > 25%)
-- Simple average ensemble
+TEST MODEL - CHÍNH XÁC 100%
+Extract đúng features model cần
 """
-
-import os
-import warnings
-warnings.filterwarnings('ignore')
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 import cv2
 import numpy as np
 import pandas as pd
-import pickle
-import traceback
 from pathlib import Path
-from typing import Dict, Tuple, Optional, List
-from ultralytics import YOLO
+import pickle
+import warnings
+warnings.filterwarnings('ignore')
 
 # Deep Learning
 try:
@@ -28,20 +18,11 @@ try:
     from tensorflow.keras.applications.mobilenet_v2 import preprocess_input as mobilenet_preprocess
     from tensorflow.keras.models import Model
     import tensorflow as tf
-    
-    gpus = tf.config.list_physical_devices('GPU')
-    if gpus:
-        try:
-            for gpu in gpus:
-                tf.config.experimental.set_memory_growth(gpu, True)
-        except RuntimeError as e:
-            print(f"GPU config: {e}")
-    
     tf.get_logger().setLevel('ERROR')
     DEEP_LEARNING = True
 except:
     DEEP_LEARNING = False
-    print("⚠️ TensorFlow not available - classical features only")
+    print("⚠️ TensorFlow not available")
 
 from scipy import stats
 from skimage import feature
@@ -49,137 +30,49 @@ from skimage.feature import graycomatrix, graycoprops
 
 
 class BananaPredictor:
-    """
-    Predictor với confidence filter:
-    - Top 3 models có confidence > 25%
-    - Simple average (không dùng trọng số)
-    """
+    """Predictor với features CHÍNH XÁC"""
     
-    def __init__(self, yolo_path: str, pkl_path: str):
+    def __init__(self, model_path=r'D:\flutter_project\banana_backend\models\regression.pkl'):
         print("=" * 80)
-        print("🍌 BANANA SHELF LIFE PREDICTOR - Backend")
+        print("🍌 BANANA SHELF LIFE PREDICTOR")
         print("=" * 80)
         
-        # Load YOLO
-        try:
-            self.yolo_model = YOLO(yolo_path)
-            print(f"✓ YOLO loaded")
-        except Exception as e:
-            print(f"❌ YOLO error: {e}")
-            raise
+        # Load model
+        print(f"📂 Loading: {model_path}")
+        with open(model_path, 'rb') as f:
+            saved_data = pickle.load(f)
         
-        # Load regression model
-        try:
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                with open(pkl_path, 'rb') as f:
-                    saved_data = pickle.load(f)
-            
-            self.models = saved_data['models']
-            self.weights = saved_data['weights']
-            self.scaler = saved_data['scaler']
-            self.selected_features = saved_data['features']
-            
-            print(f"✓ Regression loaded")
-            print(f"   Models: {len(self.models) if isinstance(self.models, dict) else len(self.models)}")
-            print(f"   Features: {len(self.selected_features)}")
-            
-        except Exception as e:
-            print(f"❌ Regression error: {e}")
-            traceback.print_exc()
-            raise
+        self.models = saved_data['models']
+        self.weights = saved_data['weights']
+        self.scaler = saved_data['scaler']
+        self.selected_features = saved_data['features']
+        
+        print(f"✓ Models: {len(self.models) if isinstance(self.models, dict) else len(self.models)}")
+        print(f"✓ Features: {len(self.selected_features)}")
         
         # Load deep learning
         if DEEP_LEARNING:
-            try:
-                print("🔥 Loading ResNet50 & MobileNetV2...")
-                
-                base_resnet = ResNet50(
-                    weights='imagenet',
-                    include_top=False,
-                    pooling='avg',
-                    input_shape=(224, 224, 3)
-                )
-                self.resnet = Model(inputs=base_resnet.input, outputs=base_resnet.output)
-                
-                base_mobile = MobileNetV2(
-                    weights='imagenet',
-                    include_top=False,
-                    pooling='avg',
-                    input_shape=(224, 224, 3)
-                )
-                self.mobilenet = Model(inputs=base_mobile.input, outputs=base_mobile.output)
-                
-                self.deep_learning_enabled = True
-                print("✓ Deep learning loaded")
-            except Exception as e:
-                print(f"⚠️ Deep learning failed: {e}")
-                self.resnet = None
-                self.mobilenet = None
-                self.deep_learning_enabled = False
+            print("🔥 Loading ResNet50 & MobileNetV2...")
+            base_resnet = ResNet50(weights='imagenet', include_top=False, pooling='avg')
+            self.resnet = Model(inputs=base_resnet.input, outputs=base_resnet.output)
+            
+            base_mobile = MobileNetV2(weights='imagenet', include_top=False, pooling='avg')
+            self.mobilenet = Model(inputs=base_mobile.input, outputs=base_mobile.output)
+            print("✓ Deep learning loaded")
         else:
             self.resnet = None
             self.mobilenet = None
-            self.deep_learning_enabled = False
         
-        self.banana_types = {
-            0: "Chuối cau",
-            1: "Chuối cau",
-            2: "Chuối xiêm",
-            3: "Chuối xiêm"
-        }
-        
-        print("=" * 80)
-        print("✅ All models ready!")
-        print("=" * 80)
         print()
     
-    def detect_banana(self, image_path: str) -> Tuple[bool, Optional[int], Optional[float], Optional[dict]]:
-        """YOLO banana detection with bounding box"""
-        try:
-            results = self.yolo_model.predict(
-                source=image_path,
-                conf=0.25,
-                iou=0.7,
-                verbose=False,
-                save=False
-            )
-            
-            if len(results) > 0 and hasattr(results[0], 'boxes') and len(results[0].boxes) > 0:
-                boxes = results[0].boxes
-                confidences = boxes.conf.cpu().numpy()
-                classes = boxes.cls.cpu().numpy().astype(int)
-                xyxy = boxes.xyxy.cpu().numpy()  # Bounding box coordinates
-                
-                max_idx = confidences.argmax()
-                predicted_class = int(classes[max_idx])
-                confidence = float(confidences[max_idx])
-                
-                # Get bounding box of best detection
-                bbox = xyxy[max_idx]
-                bbox_dict = {
-                    'x1': float(bbox[0]),
-                    'y1': float(bbox[1]),
-                    'x2': float(bbox[2]),
-                    'y2': float(bbox[3])
-                }
-                
-                return True, predicted_class, confidence, bbox_dict
-            else:
-                return False, None, None, None
-                
-        except Exception as e:
-            print(f"❌ YOLO error: {e}")
-            return False, None, None, None
-    
     def extract_deep_features(self, img):
-        """Extract deep learning features"""
-        if not self.deep_learning_enabled or self.resnet is None:
+        """Extract CHÍNH XÁC deep features model cần"""
+        if not DEEP_LEARNING or self.resnet is None:
             return {}
         
         features = {}
         
-        # RGB conversion
+        # RGB
         if len(img.shape) == 2:
             img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
         elif img.shape[2] == 4:
@@ -190,11 +83,13 @@ class BananaPredictor:
         img_resized = cv2.resize(img, (224, 224))
         img_batch = np.expand_dims(img_resized, axis=0)
         
-        # ResNet50 - f10, f25, f26, f27, f28, f29
+        # ResNet50 - CHỈ LẤY: f10, f25, f26, f27, f28, f29
         img_resnet = resnet_preprocess(img_batch.copy())
         resnet_feat = self.resnet.predict(img_resnet, verbose=0)[0]
         
-        top_indices = np.argsort(np.abs(resnet_feat))[-30:]
+        top_indices = np.argsort(np.abs(resnet_feat))[-30:]  # Top 30
+        
+        # Map theo index model cần: 10,25,26,27,28,29
         resnet_mapping = {10: 10, 25: 25, 26: 26, 27: 27, 28: 28, 29: 29}
         for model_idx in resnet_mapping.keys():
             if model_idx < len(top_indices):
@@ -207,17 +102,19 @@ class BananaPredictor:
         features['resnet_median'] = float(np.median(resnet_feat))
         features['resnet_energy'] = float(np.sum(resnet_feat**2))
         
-        # MobileNetV2 - f0-14, f23, f24
+        # MobileNetV2 - LẤY: f0-14, f23, f24 (17 features)
         img_mobile = mobilenet_preprocess(img_batch.copy())
         mobile_feat = self.mobilenet.predict(img_mobile, verbose=0)[0]
         
-        top_indices = np.argsort(np.abs(mobile_feat))[-25:]
+        top_indices = np.argsort(np.abs(mobile_feat))[-25:]  # Top 25
         
+        # f0-14
         for i in range(15):
             if i < len(top_indices):
                 feat_idx = top_indices[i]
                 features[f'mobile_f{i}'] = float(mobile_feat[feat_idx])
         
+        # f23, f24
         if 23 < len(top_indices):
             features['mobile_f23'] = float(mobile_feat[top_indices[23]])
         if 24 < len(top_indices):
@@ -247,7 +144,7 @@ class BananaPredictor:
             h, s, v = img_hsv[:, :, 0], img_hsv[:, :, 1], img_hsv[:, :, 2]
             total_pixels = h.size
             
-            # HSV statistics
+            # HSV - KHÔNG CẦN hue_min, saturation_min, value_min
             for channel, name in [(h, 'hue'), (s, 'saturation'), (v, 'value')]:
                 features[f'{name}_mean'] = float(np.mean(channel))
                 features[f'{name}_std'] = float(np.std(channel))
@@ -258,6 +155,7 @@ class BananaPredictor:
                 features[f'{name}_p75'] = float(np.percentile(channel, 75))
                 features[f'{name}_iqr'] = float(np.percentile(channel, 75) - np.percentile(channel, 25))
             
+            # value_min CẦN (kiểm tra list)
             features['value_min'] = float(np.min(v))
             features['hue_max'] = float(np.max(h))
             features['value_max'] = float(np.max(v))
@@ -377,7 +275,7 @@ class BananaPredictor:
                 _, binary = cv2.threshold(gray, thresh, 255, cv2.THRESH_BINARY_INV)
                 features[f'spot_ratio_t{thresh}'] = float(np.sum(binary > 0) / total_pixels)
             
-            # Statistics
+            # Stats
             features['hue_skew'] = float(stats.skew(h.flatten()))
             features['hue_kurtosis'] = float(stats.kurtosis(h.flatten()))
             features['saturation_skew'] = float(stats.skew(s.flatten()))
@@ -386,60 +284,59 @@ class BananaPredictor:
             features['value_kurtosis'] = float(stats.kurtosis(v.flatten()))
             
         except Exception as e:
-            print(f"⚠️ Classical features error: {e}")
+            print(f"⚠️ Error: {e}")
         
         return features
     
-    def extract_all_features(self, image_path: str) -> Dict:
-        """Extract all features"""
-        img = cv2.imread(image_path)
-        if img is None or img.size == 0:
-            raise ValueError(f"Cannot load image: {image_path}")
-        
-        img = cv2.resize(img, (224, 224))
-        
-        classical = self.extract_classical_features(img)
-        
-        if self.deep_learning_enabled:
-            deep = self.extract_deep_features(img)
-            features = {**classical, **deep}
-        else:
-            features = classical
-        
-        return features
-    
-    def predict_shelf_life(self, features: Dict) -> Tuple[float, List[Dict], dict]:
-        """
-        Predict với confidence filter
-        Returns: (days, all_models, filtered_models, stats)
-        """
+    def predict(self, image_path):
+        """Predict"""
         try:
-            # Convert to DataFrame
+            img = cv2.imread(image_path)
+            if img is None:
+                raise ValueError(f"Cannot load: {image_path}")
+            
+            img = cv2.resize(img, (224, 224))
+            
+            # Extract
+            classical = self.extract_classical_features(img)
+            
+            if DEEP_LEARNING:
+                deep = self.extract_deep_features(img)
+                features = {**classical, **deep}
+            else:
+                features = classical
+            
+            # Prepare DataFrame
             feature_df = pd.DataFrame([features])
             
-            # Get scaler features
+            # CRITICAL: Scaler expects 156 features (all features extracted during training)
+            # But model only uses 120 selected features
+            # Solution: Create DataFrame with ALL features scaler expects, then select 120
+            
+            # Get feature names scaler was trained on (if available)
             if hasattr(self.scaler, 'feature_names_in_'):
                 scaler_features = list(self.scaler.feature_names_in_)
             else:
+                # Scaler doesn't have feature names, create generic names
                 scaler_features = [f'feature_{i}' for i in range(self.scaler.n_features_in_)]
             
-            # Create full DataFrame
+            # Create full DataFrame with all scaler features
             full_feature_df = pd.DataFrame(0.0, index=[0], columns=scaler_features)
             
-            # Fill extracted features
+            # Fill with extracted features
             for col in feature_df.columns:
                 if col in full_feature_df.columns:
                     full_feature_df[col] = feature_df[col].values[0]
             
-            # Scale all features
+            # Scale ALL features
             features_scaled_all = self.scaler.transform(full_feature_df)
             
-            # Select 120 features
+            # Select only the 120 features model needs
             selected_indices = [scaler_features.index(feat) if feat in scaler_features else 0 
                                for feat in self.selected_features]
             features_for_model = features_scaled_all[:, selected_indices]
             
-            # Predict with each model
+            # Predict
             predictions = []
             if isinstance(self.models, dict):
                 for model in self.models.values():
@@ -450,47 +347,73 @@ class BananaPredictor:
                     pred = model.predict(features_for_model)[0]
                     predictions.append(float(pred))
             
-            # Calculate individual confidences
+            # Ensemble
+            if isinstance(self.weights, dict):
+                weights = list(self.weights.values())
+            else:
+                weights = list(self.weights[:len(predictions)])
+            
+            days = np.average(predictions, weights=weights)
+            days = max(0, float(days))
+            
+            # Calculate confidence metrics
+            pred_std = np.std(predictions)
+            pred_variance = np.var(predictions)
+            
+            # Individual model confidence (based on distance from thresholds)
             thresholds = [0.5, 1.5, 2.5, 3.5, 4.5]
             individual_confidences = []
             
             for pred in predictions:
+                # Find closest threshold
                 distances = [abs(pred - t) for t in thresholds]
                 min_distance = min(distances)
+                
+                # Confidence: higher distance from threshold = higher confidence
+                # Map distance to 0-100% (0.5 distance = 50%, 1.0+ = 100%)
                 confidence = min(100, min_distance * 100)
                 individual_confidences.append(confidence)
             
-            # Create model info
+            # ============================================================
+            # CONFIDENCE FILTER: Top 3 models with confidence > 25%
+            # ============================================================
+            
             model_names = ['XGBoost', 'LightGBM', 'CatBoost', 'RandomForest']
+            
+            # Create model info list
             model_info = []
             for i in range(len(predictions)):
                 model_info.append({
                     'name': model_names[i] if i < len(model_names) else f'Model {i}',
-                    'prediction': float(predictions[i]),
-                    'confidence': float(individual_confidences[i])
+                    'prediction': predictions[i],
+                    'confidence': individual_confidences[i]
                 })
             
-            # CONFIDENCE FILTER: Top 3 models with confidence > 25%
+            # Filter: confidence > 25%
             valid_models = [m for m in model_info if m['confidence'] > 25]
             
             if len(valid_models) == 0:
+                # No models pass threshold - use all models as fallback
+                print("⚠️ Warning: No models with confidence > 25%, using all models")
                 filtered_models = model_info
             else:
+                # Sort by confidence and take top 3
                 sorted_models = sorted(valid_models, key=lambda x: x['confidence'], reverse=True)
                 filtered_models = sorted_models[:3]
             
-            # SIMPLE AVERAGE
+            # Calculate ensemble with SIMPLE AVERAGE (không dùng trọng số)
             filtered_preds = [m['prediction'] for m in filtered_models]
             filtered_confs = [m['confidence'] for m in filtered_models]
             
+            # SIMPLE AVERAGE
             days = np.mean(filtered_preds)
             days = max(0, float(days))
             
-            # Statistics
+            # Recalculate statistics with filtered models
             filtered_std = np.std(filtered_preds)
             filtered_variance = np.var(filtered_preds)
             
-            # Ensemble confidence
+            # Ensemble confidence (based on agreement between filtered models)
             if filtered_std < 0.3:
                 ensemble_confidence = 95
             elif filtered_std < 0.5:
@@ -501,182 +424,187 @@ class BananaPredictor:
                 ensemble_confidence = 65
             else:
                 ensemble_confidence = 50
+
             
-            stats_dict = {
-                'std': float(filtered_std),
-                'variance': float(filtered_variance),
-                'ensemble_confidence': float(ensemble_confidence),
+            # Status (Day 1-6)
+            if days >= 4.5:
+                status = "🟢 Day 1 - Rất tươi"
+                day = 1
+            elif days >= 3.5:
+                status = "🟢 Day 2 - Tươi"
+                day = 2
+            elif days >= 2.5:
+                status = "🟡 Day 3 - Chín vừa"
+                day = 3
+            elif days >= 1.5:
+                status = "🟠 Day 4 - Chín"
+                day = 4
+            elif days >= 0.5:
+                status = "🔴 Day 5 - Rất chín"
+                day = 5
+            else:
+                status = "⚫ Day 6 - Hư"
+                day = 6
+            
+            return {
+                'image': Path(image_path).name,
+                'days': round(days, 2),
+                'status': status,
+                'day': day,
+                'preds': [round(p, 2) for p in predictions],
+                'confidences': [round(c, 1) for c in individual_confidences],
+                'ensemble_confidence': round(ensemble_confidence, 1),
+                'std': round(filtered_std, 2),
+                'variance': round(filtered_variance, 2),
+                # Filter info
                 'models_used': len(filtered_models),
                 'models_total': len(predictions),
-                'avg_confidence': float(np.mean(filtered_confs))
+                'filtered_models': filtered_models,
+                'all_models': model_info
             }
-            
-            return days, model_info, filtered_models, stats_dict
             
         except Exception as e:
-            print(f"❌ Prediction error: {e}")
+            print(f"❌ Error: {e}")
+            import traceback
             traceback.print_exc()
-            raise
+            return None
+
+
+def main():
+    predictor = BananaPredictor()
     
-    def get_freshness_status(self, prediction: float) -> Dict:
-        """Determine freshness status với day range"""
-        if prediction >= 5.5:
-            return {
-                "status": "🟢 Rất tươi",
-                "color": "#4CAF50",
-                "day": 1,
-                "days_display": "Trên 6 ngày",
-                "recommendation": "Chuối rất tươi, có thể bảo quản lâu."
-            }
-        elif prediction >= 5:
-            return {
-                "status": "🟢 Rất tươi",
-                "color": "#4CAF50",
-                "day": 1,
-                "days_display": "5-6 ngày",
-                "recommendation": "Chuối rất tươi, có thể bảo quản lâu."
-            }
-        elif prediction >= 4:
-            return {
-                "status": "🟢 Tươi",
-                "color": "#8BC34A",
-                "day": 2,
-                "days_display": "4-5 ngày",
-                "recommendation": "Chuối tươi tốt, nên dùng trong 4-5 ngày."
-            }
-        elif prediction >= 3:
-            return {
-                "status": "🟡 Chín vừa",
-                "color": "#FFC107",
-                "day": 3,
-                "days_display": "3-4 ngày",
-                "recommendation": "Chuối vẫn ổn, nên ăn trong 3-4 ngày."
-            }
-        elif prediction >= 2:
-            return {
-                "status": "🟠 Chín",
-                "color": "#FF9800",
-                "day": 4,
-                "days_display": "2-3 ngày",
-                "recommendation": "Chuối đã chín, nên ăn trong 2-3 ngày."
-            }
-        elif prediction >= 1:
-            return {
-                "status": "🔴 Rất chín",
-                "color": "#F44336",
-                "day": 5,
-                "days_display": "1-2 ngày",
-                "recommendation": "Chuối rất chín, cần dùng ngay."
-            }
-        else:
-            return {
-                "status": "⚫ Hư",
-                "color": "#D32F2F",
-                "day": 6,
-                "days_display": "0 ngày",
-                "recommendation": "Chuối đã quá chín."
-            }
-    
-    def predict(self, image_path: str) -> Dict:
-        """Complete prediction pipeline"""
-        try:
-            print(f"\n{'='*80}")
-            print(f"🍌 PROCESSING: {os.path.basename(image_path)}")
-            print(f"{'='*80}")
+    while True:
+        print("\n" + "─" * 60)
+        print("[1] Test image  [2] Test folder  [0] Exit")
+        choice = input("Choice: ").strip()
+        
+        if choice == '0':
+            break
+        
+        elif choice == '1':
+            path = input("\nImage path: ").strip().strip('"')
+            if not Path(path).exists():
+                print("❌ Not found")
+                continue
             
-            # YOLO detection
-            has_banana, banana_class, yolo_conf, bbox = self.detect_banana(image_path)
+            print("\n🎯 Predicting...")
+            result = predictor.predict(path)
             
-            if not has_banana:
-                print(f"❌ NO BANANA DETECTED!")
-                print(f"{'='*80}\n")
-                return {
-                    "success": False,
-                    "error": "Không phát hiện chuối trong ảnh",
-                    "error_code": "NO_BANANA_DETECTED"
-                }
-            
-            # Extract features
-            banana_type = self.banana_types.get(banana_class, f"Loại {banana_class}")
-            features = self.extract_all_features(image_path)
-            
-            # Predict
-            days_float, all_models, filtered_models, stats = self.predict_shelf_life(features)
-            days_remaining = int(round(days_float))
-            
-            # Status
-            freshness = self.get_freshness_status(days_float)
-            
-            result = {
-                "success": True,
-                "banana_type": banana_type,
-                "banana_class": int(banana_class),
-                "yolo_confidence": round(yolo_conf, 3),
-                "bounding_box": bbox,  # NEW: YOLO bounding box
+            if result:
+                print(f"\n{'='*80}")
+                print(f"📸 IMAGE: {result['image']}")
+                print(f"{'='*80}")
                 
-                # Final prediction
-                "days": int(days_remaining),
-                "days_exact": round(days_float, 2),
-                "days_display": freshness["days_display"],  # Range display
-                "status": freshness["status"],
-                "color": freshness["color"],
-                "day": freshness["day"],
-                "recommendation": freshness["recommendation"],
+                # All models
+                print(f"\n🤖 ALL MODELS:")
+                print(f"{'─'*80}")
                 
-                # Confidence
-                "ensemble_confidence": round(stats['ensemble_confidence'], 1),
+                for model in result['all_models']:
+                    conf_icon = "🟢" if model['confidence'] >= 60 else "🟡" if model['confidence'] >= 25 else "🔴"
+                    bar_length = int(model['prediction'] * 8) if model['prediction'] >= 0 else 0
+                    bar = '█' * bar_length
+                    
+                    # Mark if used
+                    used = "✓" if any(m['name'] == model['name'] for m in result['filtered_models']) else "✗"
+                    
+                    print(f"   [{used}] {model['name']:15s}: {model['prediction']:5.2f} days  "
+                          f"{bar:<40}  {conf_icon} {model['confidence']:5.1f}%")
                 
-                # All models (4 models)
-                "all_models": [
-                    {
-                        "name": m['name'],
-                        "prediction": round(m['prediction'], 2),
-                        "confidence": round(m['confidence'], 1)
-                    }
-                    for m in all_models
-                ],
+                print(f"{'─'*80}")
                 
-                # Filtered models (top 3 với conf > 25%)
-                "filtered_models": [
-                    {
-                        "name": m['name'],
-                        "prediction": round(m['prediction'], 2),
-                        "confidence": round(m['confidence'], 1)
-                    }
-                    for m in filtered_models
-                ],
+                # Filter info
+                print(f"\n🔍 CONFIDENCE FILTER:")
+                print(f"   Threshold: > 25%")
+                print(f"   Models used: {result['models_used']}/{result['models_total']}")
+                print(f"   Average method: SIMPLE AVERAGE (equal weight)")
+                
+                # Top models
+                print(f"\n🏆 MODELS USED:")
+                print(f"{'─'*80}")
+                
+                for i, model in enumerate(result['filtered_models'], 1):
+                    conf_icon = "🟢" if model['confidence'] >= 60 else "🟡"
+                    print(f"   #{i}. {model['name']:15s}: {model['prediction']:5.2f} days  {conf_icon} {model['confidence']:5.1f}%")
+                
+                print(f"{'─'*80}")
+                
+                # Agreement
+                print(f"\n📈 MODEL AGREEMENT:")
+                print(f"   Standard Deviation: {result['std']:.2f}")
+                print(f"   Variance: {result['variance']:.2f}")
+                
+                # Final result
+                print(f"\n📊 FINAL RESULT:")
+                avg_parts = ' + '.join([f"{m['prediction']:.2f}" for m in result['filtered_models']])
+                print(f"   Average: ({avg_parts}) / {len(result['filtered_models'])}")
+                print(f"   Prediction: {result['days']:.2f} days")
+                
+                ens_conf = result['ensemble_confidence']
+                ens_icon = "🟢" if ens_conf >= 85 else "🟡" if ens_conf >= 70 else "🔴"
+                
+                print(f"   Confidence: {ens_icon} {ens_conf:.1f}%")
+                print(f"\n   Status: {result['status']}")
+                print(f"   Day: {result['day']}/6")
+                print(f"{'='*80}")
+        
+        elif choice == '2':
+            folder = input("\nFolder path: ").strip().strip('"')
+            folder = Path(folder)
+            if not folder.exists():
+                print("❌ Not found")
+                continue
+            
+            images = []
+            for ext in ['*.jpg', '*.jpeg', '*.png', '*.JPG']:
+                images.extend(list(folder.glob(ext)))
+            
+            if not images:
+                print("❌ No images")
+                continue
+            
+            print(f"\n📁 Processing {len(images)} images...")
+            results = []
+            for img in images:
+                r = predictor.predict(str(img))
+                if r:
+                    results.append(r)
+            
+            if results:
+                print(f"\n{'='*100}")
+                print(f"📊 SUMMARY ({len(results)} images)")
+                print(f"{'='*100}")
+                print(f"\n{'Image':<25} {'Final':>6}  {'Conf':>5}  {'XGB':>5} {'LGB':>5} {'Cat':>5} {'RF':>5}  {'Status':<25}")
+                print("─" * 100)
+                
+                for r in sorted(results, key=lambda x: x['days'], reverse=True):
+                    preds = r['preds']
+                    while len(preds) < 4:
+                        preds.append(0)
+                    
+                    # Confidence icon
+                    conf = r['ensemble_confidence']
+                    if conf >= 85:
+                        conf_icon = "🟢"
+                    elif conf >= 70:
+                        conf_icon = "🟡"
+                    else:
+                        conf_icon = "🔴"
+                    
+                    print(f"{r['image']:<25} {r['days']:>6.2f}  {conf_icon}{conf:>4.0f}%  "
+                          f"{preds[0]:>5.2f} {preds[1]:>5.2f} {preds[2]:>5.2f} {preds[3]:>5.2f}  "
+                          f"{r['status']:<25}")
+                
+                print("=" * 100)
                 
                 # Statistics
-                "statistics": {
-                    "std": round(stats['std'], 2),
-                    "variance": round(stats['variance'], 2),
-                    "models_used": stats['models_used'],
-                    "models_total": stats['models_total'],
-                    "avg_confidence": round(stats['avg_confidence'], 1)
-                },
-                
-                # Meta
-                "features_extracted": len(features),
-                "features_required": len(self.selected_features),
-                "deep_learning_enabled": self.deep_learning_enabled
-            }
-            
-            print(f"✓ Prediction: {days_remaining} days ({days_float:.2f})")
-            print(f"✓ Models used: {stats['models_used']}/{stats['models_total']}")
-            print(f"✓ Status: {freshness['status']}")
-            print(f"✓ Confidence: {stats['ensemble_confidence']:.1f}%")
-            print(f"{'='*80}\n")
-            
-            return result
-        
-        except Exception as e:
-            error_msg = f"Error: {str(e)}"
-            print(f"❌ {error_msg}")
-            traceback.print_exc()
-            
-            return {
-                "success": False,
-                "error": error_msg,
-                "error_code": "PROCESSING_ERROR",
-                "error_detail": traceback.format_exc()
-            }
+                avg_conf = np.mean([r['ensemble_confidence'] for r in results])
+                print(f"\n📈 STATISTICS:")
+                print(f"   Average confidence: {avg_conf:.1f}%")
+                print(f"   High confidence (≥85%): {sum(1 for r in results if r['ensemble_confidence'] >= 85)}/{len(results)}")
+                print(f"   Medium confidence (70-85%): {sum(1 for r in results if 70 <= r['ensemble_confidence'] < 85)}/{len(results)}")
+                print(f"   Low confidence (<70%): {sum(1 for r in results if r['ensemble_confidence'] < 70)}/{len(results)}")
+                print("=" * 100)
+
+
+if __name__ == "__main__":
+    main()

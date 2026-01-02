@@ -1,8 +1,6 @@
 class ApiConfig {
-  // QUAN TRỌNG: Thay đổi URL này theo backend của bạn
-
   // Dùng cho Android Emulator
-  static const String baseUrl = 'http://10.0.2.2:8000';
+  static const String baseUrl = 'https://terete-todd-gratulant.ngrok-free.dev';
 
   // Dùng cho thiết bị thật (thay IP máy tính chạy backend)
   // static const String baseUrl = 'http://192.168.1.100:8000';

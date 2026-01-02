@@ -11,42 +11,54 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final ApiService _apiService = ApiService();
   final ImageService _imageService = ImageService();
 
   bool _isLoading = false;
   bool _isServerHealthy = false;
-  bool _isCheckingHealth = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _checkServerHealth();
   }
 
-  Future<void> _checkServerHealth() async {
-    setState(() {
-      _isCheckingHealth = true;
-    });
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    // Khi app quay lại foreground, check server lại
+    if (state == AppLifecycleState.resumed) {
+      _checkServerHealth(silent: true);
+    }
+  }
+
+  Future<void> _checkServerHealth({bool silent = false}) async {
     final isHealthy = await _apiService.checkHealth();
 
     setState(() {
       _isServerHealthy = isHealthy;
-      _isCheckingHealth = false;
     });
 
-    if (!isHealthy) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('⚠️ Không kết nối được server. Kiểm tra backend!'),
-            backgroundColor: Colors.red,
-            duration: Duration(seconds: 5),
+    // Hiển thị SnackBar ở dưới nếu không kết nối được (và không silent)
+    if (!isHealthy && mounted && !silent) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Center(
+            child: Text('⚠️ Không thể kết nối server!'),
           ),
-        );
-      }
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 5),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 
@@ -77,6 +89,11 @@ class _HomeScreenState extends State<HomeScreen> {
       });
 
       if (result.success) {
+        // Success → Đánh dấu server healthy
+        setState(() {
+          _isServerHealthy = true;
+        });
+
         if (mounted) {
           Navigator.push(
             context,
@@ -89,6 +106,9 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         }
       } else {
+        // Error → Check lại server để update status
+        _checkServerHealth(silent: true);
+
         if (mounted) {
           showDialog(
             context: context,
@@ -110,9 +130,16 @@ class _HomeScreenState extends State<HomeScreen> {
         _isLoading = false;
       });
 
+      // Exception → Check lại server
+      _checkServerHealth(silent: true);
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Lỗi: $e')),
+          SnackBar(
+            content: Text('Lỗi: $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
         );
       }
     }
@@ -122,7 +149,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('🍌 Dự đoán Chuối'),
+        title: const Text('🍌 Dự đoán hạn sử dụng của chuối'),
         backgroundColor: Colors.amber,
         elevation: 0,
       ),
@@ -165,76 +192,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Card(
-                        elevation: 4,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        color: _isServerHealthy
-                            ? Colors.green.shade50
-                            : Colors.red.shade50,
-                        child: Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Row(
-                            children: [
-                              Icon(
-                                _isServerHealthy
-                                    ? Icons.check_circle
-                                    : Icons.error,
-                                color: _isServerHealthy
-                                    ? Colors.green
-                                    : Colors.red,
-                                size: 28,
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      _isServerHealthy
-                                          ? '✅ Server đang hoạt động'
-                                          : '❌ Không kết nối được server',
-                                      style: TextStyle(
-                                        color: _isServerHealthy
-                                            ? Colors.green.shade900
-                                            : Colors.red.shade900,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16,
-                                      ),
-                                    ),
-                                    if (!_isServerHealthy) ...[
-                                      const SizedBox(height: 4),
-                                      const Text(
-                                        'Kiểm tra backend đã chạy chưa',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.grey,
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                              if (_isCheckingHealth)
-                                const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              else
-                                IconButton(
-                                  icon: const Icon(Icons.refresh),
-                                  onPressed: _checkServerHealth,
-                                  tooltip: 'Kiểm tra lại',
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 48),
+                      // REMOVED: Server status card
+                      // Không hiển thị card trạng thái server nữa
+
                       Container(
                         width: 150,
                         height: 150,
@@ -269,9 +229,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         width: double.infinity,
                         height: 60,
                         child: ElevatedButton.icon(
-                          onPressed: _isServerHealthy
-                              ? () => _pickAndPredict(ImageSource.camera)
-                              : null,
+                          onPressed: () => _pickAndPredict(ImageSource.camera),
                           icon: const Icon(Icons.camera_alt, size: 28),
                           label: const Text(
                             'Chụp ảnh',
@@ -295,9 +253,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         width: double.infinity,
                         height: 60,
                         child: ElevatedButton.icon(
-                          onPressed: _isServerHealthy
-                              ? () => _pickAndPredict(ImageSource.gallery)
-                              : null,
+                          onPressed: () => _pickAndPredict(ImageSource.gallery),
                           icon: const Icon(Icons.photo_library, size: 28),
                           label: const Text(
                             'Chọn từ thư viện',

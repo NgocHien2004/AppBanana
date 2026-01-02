@@ -1,8 +1,10 @@
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../models/prediction_result.dart';
 
-class ResultScreen extends StatelessWidget {
+class ResultScreen extends StatefulWidget {
   final String imagePath;
   final PredictionResult result;
 
@@ -11,6 +13,33 @@ class ResultScreen extends StatelessWidget {
     required this.imagePath,
     required this.result,
   }) : super(key: key);
+
+  @override
+  State<ResultScreen> createState() => _ResultScreenState();
+}
+
+class _ResultScreenState extends State<ResultScreen> {
+  ui.Image? _image;
+  bool _imageLoaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.result.boundingBox != null) {
+      _loadImage();
+    }
+  }
+
+  Future<void> _loadImage() async {
+    final File file = File(widget.imagePath);
+    final Uint8List bytes = await file.readAsBytes();
+    final ui.Codec codec = await ui.instantiateImageCodec(bytes);
+    final ui.FrameInfo frame = await codec.getNextFrame();
+    setState(() {
+      _image = frame.image;
+      _imageLoaded = true;
+    });
+  }
 
   Color _parseColor(String colorString) {
     try {
@@ -21,10 +50,10 @@ class ResultScreen extends StatelessWidget {
   }
 
   String _getEmoji(int days) {
-    if (days <= 0) return '🚫';
-    if (days <= 2) return '⚠️';
-    if (days <= 5) return '😊';
-    return '🌟';
+    if (days <= 0) return '❌';
+    if (days <= 2) return '🔴';
+    if (days <= 5) return '🟡';
+    return '🟢';
   }
 
   String _getRecommendation(int days) {
@@ -39,10 +68,53 @@ class ResultScreen extends StatelessWidget {
     }
   }
 
+  Widget _buildImageWithBbox() {
+    final statusColor = _parseColor(widget.result.color);
+
+    if (widget.result.boundingBox == null) {
+      return Image.file(
+        File(widget.imagePath),
+        height: 300,
+        fit: BoxFit.cover,
+      );
+    }
+
+    if (!_imageLoaded || _image == null) {
+      return Container(
+        height: 300,
+        color: Colors.grey[200],
+        child: const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    return SizedBox(
+      height: 300,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.file(
+            File(widget.imagePath),
+            fit: BoxFit.cover,
+          ),
+          CustomPaint(
+            painter: BboxPainter(
+              bbox: widget.result.boundingBox!,
+              imageWidth: _image!.width.toDouble(),
+              imageHeight: _image!.height.toDouble(),
+              color: statusColor,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final statusColor = _parseColor(result.color);
-    final emoji = _getEmoji(result.days);
+    final statusColor = _parseColor(widget.result.color);
+    final emoji = _getEmoji(widget.result.days);
 
     return Scaffold(
       appBar: AppBar(
@@ -66,6 +138,7 @@ class ResultScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // Image with bounding box
               Card(
                 elevation: 8,
                 shape: RoundedRectangleBorder(
@@ -73,11 +146,7 @@ class ResultScreen extends StatelessWidget {
                 ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(20),
-                  child: Image.file(
-                    File(imagePath),
-                    height: 300,
-                    fit: BoxFit.cover,
-                  ),
+                  child: _buildImageWithBbox(),
                 ),
               ),
               const SizedBox(height: 24),
@@ -104,9 +173,17 @@ class ResultScreen extends StatelessWidget {
                     children: [
                       Row(
                         children: [
-                          Text(
-                            emoji,
-                            style: const TextStyle(fontSize: 40),
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: statusColor.withOpacity(0.2),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.analytics_rounded,
+                              size: 32,
+                              color: statusColor,
+                            ),
                           ),
                           const SizedBox(width: 12),
                           const Expanded(
@@ -131,7 +208,7 @@ class ResultScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '🍌 ${result.bananaType}',
+                        '🍌 ${widget.result.bananaType}',
                         style: const TextStyle(
                           fontSize: 26,
                           fontWeight: FontWeight.bold,
@@ -154,36 +231,28 @@ class ResultScreen extends StatelessWidget {
                           ),
                           child: Column(
                             children: [
-                              Text(
-                                '${result.days}',
-                                style: TextStyle(
-                                  fontSize: 72,
-                                  fontWeight: FontWeight.bold,
-                                  color: statusColor,
-                                  height: 1,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
                               const Text(
-                                'NGÀY',
+                                'HẠN SỬ DỤNG',
                                 style: TextStyle(
-                                  fontSize: 20,
+                                  fontSize: 16,
                                   fontWeight: FontWeight.bold,
                                   letterSpacing: 2,
                                 ),
                               ),
+                              const SizedBox(height: 8),
+                              Text(
+                                widget.result.daysDisplay.isNotEmpty
+                                    ? widget.result.daysDisplay
+                                    : '${widget.result.days} ngày',
+                                style: TextStyle(
+                                  fontSize: 48,
+                                  fontWeight: FontWeight.bold,
+                                  color: statusColor,
+                                  height: 1.2,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
                             ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Center(
-                        child: Text(
-                          '(chính xác: ${result.daysExact} ngày)',
-                          style: const TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey,
-                            fontStyle: FontStyle.italic,
                           ),
                         ),
                       ),
@@ -207,7 +276,7 @@ class ResultScreen extends StatelessWidget {
                             const SizedBox(width: 12),
                             Expanded(
                               child: Text(
-                                result.status,
+                                widget.result.status,
                                 style: TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.bold,
@@ -243,7 +312,7 @@ class ResultScreen extends StatelessWidget {
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              _getRecommendation(result.days),
+                              _getRecommendation(widget.result.days),
                               style: const TextStyle(
                                 fontSize: 14,
                                 height: 1.5,
@@ -284,5 +353,115 @@ class ResultScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+// Bounding Box Painter với scale chính xác
+class BboxPainter extends CustomPainter {
+  final BoundingBox bbox;
+  final double imageWidth;
+  final double imageHeight;
+  final Color color;
+
+  BboxPainter({
+    required this.bbox,
+    required this.imageWidth,
+    required this.imageHeight,
+    required this.color,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Calculate scale factor
+    final scaleX = size.width / imageWidth;
+    final scaleY = size.height / imageHeight;
+
+    // Scale bbox coordinates
+    final x1 = bbox.x1 * scaleX;
+    final y1 = bbox.y1 * scaleY;
+    final x2 = bbox.x2 * scaleX;
+    final y2 = bbox.y2 * scaleY;
+
+    final rect = Rect.fromLTRB(x1, y1, x2, y2);
+
+    // Draw semi-transparent background
+    final bgPaint = Paint()
+      ..color = color.withOpacity(0.15)
+      ..style = PaintingStyle.fill;
+    canvas.drawRect(rect, bgPaint);
+
+    // Draw border
+    final borderPaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3.0;
+    canvas.drawRect(rect, borderPaint);
+
+    // Draw thick corners
+    final cornerPaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 5.0
+      ..strokeCap = StrokeCap.round;
+
+    final cornerLen = 25.0;
+
+    // Top-left corner
+    canvas.drawLine(Offset(x1, y1), Offset(x1 + cornerLen, y1), cornerPaint);
+    canvas.drawLine(Offset(x1, y1), Offset(x1, y1 + cornerLen), cornerPaint);
+
+    // Top-right corner
+    canvas.drawLine(Offset(x2, y1), Offset(x2 - cornerLen, y1), cornerPaint);
+    canvas.drawLine(Offset(x2, y1), Offset(x2, y1 + cornerLen), cornerPaint);
+
+    // Bottom-left corner
+    canvas.drawLine(Offset(x1, y2), Offset(x1 + cornerLen, y2), cornerPaint);
+    canvas.drawLine(Offset(x1, y2), Offset(x1, y2 - cornerLen), cornerPaint);
+
+    // Bottom-right corner
+    canvas.drawLine(Offset(x2, y2), Offset(x2 - cornerLen, y2), cornerPaint);
+    canvas.drawLine(Offset(x2, y2), Offset(x2, y2 - cornerLen), cornerPaint);
+
+    // Draw label at top-left
+    final textSpan = TextSpan(
+      text: '  🍌 Banana Detected  ',
+      style: TextStyle(
+        color: Colors.white,
+        fontSize: 14,
+        fontWeight: FontWeight.bold,
+      ),
+    );
+
+    final textPainter = TextPainter(
+      text: textSpan,
+      textDirection: ui.TextDirection.ltr,
+    );
+
+    textPainter.layout();
+
+    // Background for text
+    final textBgRect = Rect.fromLTWH(
+      x1,
+      y1 - 28,
+      textPainter.width,
+      24,
+    );
+
+    final textBgPaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+
+    canvas.drawRect(textBgRect, textBgPaint);
+
+    // Draw text
+    textPainter.paint(canvas, Offset(x1, y1 - 26));
+  }
+
+  @override
+  bool shouldRepaint(BboxPainter oldDelegate) {
+    return oldDelegate.bbox != bbox ||
+        oldDelegate.imageWidth != imageWidth ||
+        oldDelegate.imageHeight != imageHeight ||
+        oldDelegate.color != color;
   }
 }
